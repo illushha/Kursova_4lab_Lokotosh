@@ -1,50 +1,32 @@
 pipeline {
-  agent any
-  options { timestamps() }
+    agent any
 
-  environment {
-    // MSBuild – той самий, що ти запускaв у терміналі
-    MSBUILD = 'C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\MSBuild\\Current\\Bin\\amd64\\MSBuild.exe'
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: 'main', url: 'https://github.com/illushha/Kursova_4lab_Lokotosh.git'
+            }
+        }
 
-    SLN      = 'test_repos.sln'
-    CONFIG   = 'Debug'
-    PLATFORM = 'x64'
+        stage('Build') {
+            steps {
+                bat '"C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\MSBuild\\Current\\Bin\\amd64\\MSBuild.exe" test_repos.sln /t:Rebuild /p:Configuration=Debug;Platform=x64'
+            }
+        }
 
-    TEST_EXE = 'x64\\Debug\\test_repos.exe'      // тут назва твого exe
-    XML_OUT  = 'x64\\Debug\\test_report.xml'
-  }
-
-  stages {
-    stage('Checkout') {
-      steps {
-        checkout scm
-      }
+        stage('Test') {
+            steps {
+                // запускаємо gtest і генеруємо XML-звіт
+                bat 'x64\\Debug\\test_repos.exe --gtest_output=xml:x64\\Debug\\test_report.xml'
+            }
+        }
     }
 
-    stage('Build') {
-      steps {
-        bat "\"%MSBUILD%\" %SLN% /t:Rebuild \"/p:Configuration=%CONFIG%;Platform=%PLATFORM%\""
-      }
+    post {
+        always {
+            // підхоплюємо результат тестів і зберігаємо xml як артефакт
+            junit 'x64/Debug/test_report.xml'
+            archiveArtifacts artifacts: 'x64/Debug/test_report.xml', fingerprint: true
+        }
     }
-
-    stage('Test') {
-      steps {
-        bat "%TEST_EXE% --gtest_output=xml:%XML_OUT%"
-      }
-    }
-  }
-
-  post {
-    always {
-      xunit tools: [GoogleTest(
-        pattern: 'x64/Debug/*.xml',
-        deleteOutputFiles: true,
-        failIfNotNew: false,
-        skipNoTestFiles: true,
-        stopProcessingIfError: false
-      )]
-
-      archiveArtifacts artifacts: 'x64/Debug/test_report.xml', fingerprint: true, onlyIfSuccessful: false
-    }
-  }
 }
